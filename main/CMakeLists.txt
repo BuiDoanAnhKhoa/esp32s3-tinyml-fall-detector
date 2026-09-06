@@ -1,0 +1,27 @@
+idf_component_register(
+    SRCS
+        "app/main.c"
+        "app/fall_detection.cc"
+        "drivers/mpu6050.c"
+        "drivers/fall_indicator.c"
+        "network/wifi_station.c"
+        "network/mqtt_reporter.c"
+        "model/model_input.cc"
+        "model/model_runtime.cc"
+        "model/model_data.cc"
+    INCLUDE_DIRS
+        "."
+        "app"
+        "drivers"
+        "network"
+        "model"
+    PRIV_REQUIRES
+        esp_driver_i2c
+        esp_driver_gpio
+        esp_timer
+        esp_psram
+        esp_wifi
+        esp_netif
+        nvs_flash
+        esp_event
+)

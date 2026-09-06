@@ -1,0 +1,73 @@
+menu "MPU6050 Fall Detection Configuration"
+
+    config I2C_MASTER_SCL
+        int "I2C SCL GPIO Pin"
+        default 5
+        help
+            GPIO number for I2C SCL clock line.
+
+    config I2C_MASTER_SDA
+        int "I2C SDA GPIO Pin"
+        default 4
+        help
+            GPIO number for I2C SDA data line.
+
+    config I2C_MASTER_FREQUENCY
+        int "I2C Clock Frequency (Hz)"
+        default 400000
+        help
+            I2C clock speed in Hz (100000 for Standard, 400000 for Fast Mode).
+
+    config FALL_RGB_GPIO
+        int "Onboard addressable RGB LED GPIO"
+        range 0 48
+        default 48
+        help
+            Board-specific: original ESP32-S3-DevKitC-1 uses GPIO48;
+            DevKitC-1 v1.1 uses GPIO38. Check your board's schematic.
+            N16R8 identifies memory capacity, not the LED pin.
+
+    config FALL_RGB_BRIGHTNESS
+        int "Red LED brightness when a fall is detected"
+        range 1 255
+        default 64
+
+    config FALL_MODEL_ARENA_KB
+        int "Model working memory in PSRAM (KiB)"
+        range 256 4096
+        default 256
+        help
+            Reserved once at boot. Startup validates that the model fits.
+            The N16R8 board requires octal PSRAM enabled in menuconfig.
+
+endmenu
+
+menu "WiFi and MQTT Configuration"
+
+    config FALL_WIFI_SSID
+        string "WiFi SSID"
+        default "myssid"
+        help
+            SSID (network name) to connect to.
+
+    config FALL_WIFI_PASSWORD
+        string "WiFi Password"
+        default "mypassword"
+        help
+            WiFi password (WPA2-PSK).
+
+    config FALL_MQTT_BROKER_IP
+        string "MQTT Broker IP Address"
+        default "192.168.1.100"
+        help
+            IP address of the machine running the Mosquitto MQTT broker.
+            Find it with: hostname -I
+
+    config FALL_MQTT_BROKER_PORT
+        int "MQTT Broker Port"
+        range 1 65535
+        default 1883
+        help
+            TCP port of the MQTT broker (default 1883).
+
+endmenu

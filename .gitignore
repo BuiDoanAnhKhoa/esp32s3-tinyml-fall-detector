@@ -1,0 +1,28 @@
+# ESP-IDF Build output
+build/
+
+# Generated configuration (sdkconfig.defaults is tracked, sdkconfig is generated)
+sdkconfig
+sdkconfig.old
+
+# ESP-IDF Managed Components (re-downloaded automatically via idf_component.yml)
+managed_components/
+
+# Editor / IDE artifacts
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.project
+.cproject
+.settings/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+
+# OS files
+.DS_Store
+Thumbs.db
+*~
+*.swp
