@@ -8,6 +8,7 @@
 #include "model_runtime.h"
 #include "mqtt_reporter.h"
 #include "sdkconfig.h"
+#include "sleep_button.h"
 
 namespace {
 constexpr int64_t kMaxQueuedAgeUs = 2000000;
@@ -58,9 +59,14 @@ void InferenceTask(void *) {
     uint32_t previous_sequence = 0;
     int64_t previous_timestamp = 0;
 
+    int64_t fall_cooldown_until = 0;
+
     for (;;) {
         imu_sample_t sample;
         if (xQueueReceive(sample_queue, &sample, pdMS_TO_TICKS(100)) != pdTRUE) {
+            if (sleep_button_is_sleeping()) {
+                continue;
+            }
             if (LogFaultNow()) ESP_LOGW("FALL", "No sensor samples for 100 ms; check MPU read errors");
             window.Reset();
             warming_up = true;
@@ -120,9 +126,15 @@ void InferenceTask(void *) {
             Report(score >= kFallThreshold ? FALL_STATE_DETECTED : FALL_STATE_NORMAL);
             ESP_LOGI("FALL", "%s: score=%.4f (threshold=%.2f), time=%lld ms",
                      score >= kFallThreshold ? "FALL" : "NORMAL", double(score), double(kFallThreshold), (long long)(elapsed / 1000));
-            mqtt_reporter_publish_result(
-                score >= kFallThreshold ? "FALL" : "NORMAL",
-                score, (int)(elapsed / 1000));
+            const int64_t now = esp_timer_get_time();
+            if (now >= fall_cooldown_until) {
+                mqtt_reporter_publish_result(
+                    score >= kFallThreshold ? "FALL" : "NORMAL",
+                    score, (int)(elapsed / 1000));
+                if (score >= kFallThreshold) {
+                    fall_cooldown_until = now + 5000000;  // 5 s
+                }
+            }
         }
         // Let the Core 1 idle task run, including while draining queued samples.
         vTaskDelay(1);

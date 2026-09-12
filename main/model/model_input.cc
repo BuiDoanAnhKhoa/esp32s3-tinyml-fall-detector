@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cstring>
 
-static_assert(kNumFeatures == 8 && kInputSize == 8);
+static_assert(kNumFeatures == 3 && kInputSize == 3);
 static_assert(kWindowSize == 200 && kWindowStep > 0 && kWindowStep <= kWindowSize);
 static_assert(sizeof(kScalerMean) / sizeof(float) == kNumFeatures);
 static_assert(sizeof(kScalerScale) / sizeof(float) == kNumFeatures);
@@ -18,11 +18,7 @@ void ModelInputWindow::Reset() {
 
 WindowUpdate ModelInputWindow::Push(const imu_sample_t &sample) {
     const float *a = sample.acc;
-    const float *g = sample.gyro;
-    const float raw[kNumFeatures] = {
-        a[0], a[1], a[2], std::sqrt(a[0]*a[0] + a[1]*a[1] + a[2]*a[2]),
-        g[0], g[1], g[2], std::sqrt(g[0]*g[0] + g[1]*g[1] + g[2]*g[2]),
-    };
+    const float raw[kNumFeatures] = { a[0], a[1], a[2] };
     float scaled[kNumFeatures];
     for (int i = 0; i < kNumFeatures; ++i) {
         if (!std::isfinite(raw[i]) || !std::isfinite(kScalerScale[i]) || kScalerScale[i] <= 0) {

@@ -43,7 +43,7 @@ bool ModelRuntime::Initialize(uint8_t *arena, std::size_t arena_size) {
     if (interpreter_->inputs_size() != 1 || interpreter_->outputs_size() != 1) return false;
     const TfLiteTensor *input = interpreter_->input(0);
     const TfLiteTensor *output = interpreter_->output(0);
-    error_ = "expected float input [1,1600] and output [1,1]";
+    error_ = "expected float input [1,600] and output [1,1]";
     ready_ = input && output &&
         input->type == kTfLiteFloat32 && input->dims->size == 2 &&
         input->dims->data[0] == 1 && input->dims->data[1] == kTensorValues &&

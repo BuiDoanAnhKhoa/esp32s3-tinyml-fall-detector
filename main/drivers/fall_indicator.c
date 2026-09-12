@@ -14,6 +14,7 @@ static esp_err_t show_state(fall_state_t state) {
     case FALL_STATE_DETECTED: red = CONFIG_FALL_RGB_BRIGHTNESS; break;
     case FALL_STATE_ERROR: red = 32; green = 8; break;
     case FALL_STATE_NORMAL: break;
+    case FALL_STATE_SLEEP: green = 6; blue = 8; break;
     }
     esp_err_t err = led_strip_set_pixel(strip, 0, red, green, blue);
     return err == ESP_OK ? led_strip_refresh(strip) : err;

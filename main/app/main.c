@@ -10,8 +10,10 @@
 #include "fall_detection.h"
 #include "fall_indicator.h"
 #include "imu_sample.h"
+#include "imu_stream.h"
 #include "mqtt_reporter.h"
 #include "mpu6050.h"
+#include "sleep_button.h"
 #include "wifi_station.h"
 #include "sdkconfig.h"
 
@@ -22,6 +24,11 @@
 _Static_assert(CONFIG_FALL_RGB_GPIO != CONFIG_I2C_MASTER_SDA &&
                CONFIG_FALL_RGB_GPIO != CONFIG_I2C_MASTER_SCL,
                "RGB pin must not overlap the MPU I2C pins");
+
+_Static_assert(CONFIG_FALL_SLEEP_BUTTON_GPIO != CONFIG_I2C_MASTER_SDA &&
+               CONFIG_FALL_SLEEP_BUTTON_GPIO != CONFIG_I2C_MASTER_SCL &&
+               CONFIG_FALL_SLEEP_BUTTON_GPIO != CONFIG_FALL_RGB_GPIO,
+               "Sleep button pin must not overlap I2C or RGB pins");
 
 static mpu6050_handle_t mpu;
 static QueueHandle_t sample_queue;
@@ -38,6 +45,9 @@ static void imu_task(void *arg) {
 
     for (;;) {
         vTaskDelayUntil(&last_wake, period);
+        if (sleep_button_is_sleeping()) {
+            continue;
+        }
         imu_sample_t sample = {
             .timestamp_us = esp_timer_get_time(),
             .sequence = sequence++,
@@ -58,6 +68,7 @@ static void imu_task(void *arg) {
         sample.gyro[0] = motion.gyr_x;
         sample.gyro[1] = motion.gyr_y;
         sample.gyro[2] = motion.gyr_z;
+        imu_stream_submit(&sample);
         // Never wait for inference. A full queue drops this sample; its missing
         // sequence number makes Core 1 discard the interrupted model window.
         if (xQueueSend(sample_queue, &sample, 0) != pdTRUE &&
@@ -118,10 +129,22 @@ void app_main(void) {
         err = fall_detection_start(sample_queue, state_queue);
         if (err != ESP_OK) ESP_LOGE("APP", "Cannot start model task: %s", esp_err_to_name(err));
     }
+    if (err == ESP_OK) {
+        const esp_err_t stream_error = imu_stream_start();
+        if (stream_error != ESP_OK) {
+            ESP_LOGW("APP", "MPU stream unavailable: %s", esp_err_to_name(stream_error));
+        }
+    }
     if (err == ESP_OK && xTaskCreatePinnedToCore(
             imu_task, "imu_task", 4096, NULL, 12, NULL, 0) != pdPASS) {
         err = ESP_ERR_NO_MEM;
         ESP_LOGE("APP", "Cannot start sampling task: not enough internal memory");
+    }
+    if (err == ESP_OK) {
+        esp_err_t btn_err = sleep_button_init(state_queue, sample_queue, &mpu);
+        if (btn_err != ESP_OK) {
+            ESP_LOGW("APP", "Sleep button unavailable: %s", esp_err_to_name(btn_err));
+        }
     }
     if (err != ESP_OK) {
         ESP_LOGE("APP", "Startup stopped; LED is amber");

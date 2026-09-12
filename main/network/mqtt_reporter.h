@@ -20,6 +20,9 @@ void mqtt_reporter_publish_error(const char *message);
 /// True if currently connected to the MQTT broker.
 bool mqtt_reporter_is_connected(void);
 
+/// Publish sleep/wake mode status. Non-blocking; skips if not connected.
+void mqtt_reporter_publish_sleep(bool is_sleeping);
+
 #ifdef __cplusplus
 }
 #endif

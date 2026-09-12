@@ -18,7 +18,7 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
         ESP_LOGI(TAG, "Connected to broker");
         s_connected = true;
         esp_mqtt_client_publish(s_client, "fall-detector/online",
-                                "{\"status\":\"online\"}", 0, 0, 1);
+                                "{\"status\":\"online\",\"mode\":\"active\"}", 0, 0, 1);
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGW(TAG, "Disconnected from broker");
@@ -81,7 +81,7 @@ void mqtt_reporter_publish_result(const char *status, float score, int time_ms) 
     if (!s_connected) return;
     char payload[128];
     snprintf(payload, sizeof(payload),
-             "{\"status\":\"%s\",\"score\":%.4f,\"time_ms\":%d}",
+             "{\"status\":\"%s\",\"score\":%.4f,\"time_ms\":%d,\"mode\":\"active\"}",
              status, (double)score, time_ms);
     esp_mqtt_client_publish(s_client, "fall-detector/result", payload, 0, 1, 0);
 }
@@ -101,4 +101,12 @@ void mqtt_reporter_publish_error(const char *message) {
 
 bool mqtt_reporter_is_connected(void) {
     return s_connected;
+}
+
+void mqtt_reporter_publish_sleep(bool is_sleeping) {
+    if (!s_connected) return;
+    const char *payload = is_sleeping
+        ? "{\"status\":\"online\",\"mode\":\"sleep\"}"
+        : "{\"status\":\"online\",\"mode\":\"active\"}";
+    esp_mqtt_client_publish(s_client, "fall-detector/online", payload, 0, 1, 1);
 }

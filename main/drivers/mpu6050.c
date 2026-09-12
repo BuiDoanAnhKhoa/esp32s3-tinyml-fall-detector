@@ -91,3 +91,17 @@ esp_err_t mpu6050_read_motion(mpu6050_handle_t *mpu, mpu6050_data_t *data) {
 
     return ESP_OK;
 }
+
+esp_err_t mpu6050_sleep(mpu6050_handle_t *mpu) {
+    if (!mpu) return ESP_ERR_INVALID_ARG;
+    uint8_t cmd[2] = {REG_PWR_MGMT_1, 0x40};  // Set SLEEP bit
+    return i2c_master_transmit(mpu->dev_handle, cmd, sizeof(cmd), 50);
+}
+
+esp_err_t mpu6050_wake(mpu6050_handle_t *mpu) {
+    if (!mpu) return ESP_ERR_INVALID_ARG;
+    uint8_t cmd[2] = {REG_PWR_MGMT_1, 0x00};  // Clear SLEEP bit
+    esp_err_t ret = i2c_master_transmit(mpu->dev_handle, cmd, sizeof(cmd), 50);
+    if (ret == ESP_OK) vTaskDelay(pdMS_TO_TICKS(10));
+    return ret;
+}

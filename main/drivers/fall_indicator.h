@@ -13,6 +13,7 @@ typedef enum {
     FALL_STATE_NORMAL,
     FALL_STATE_DETECTED,
     FALL_STATE_ERROR,
+    FALL_STATE_SLEEP,
 } fall_state_t;
 
 // Initializes the RGB on Core 0 and starts its owner task on Core 0.

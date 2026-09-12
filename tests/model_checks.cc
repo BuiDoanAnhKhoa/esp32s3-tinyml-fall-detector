@@ -33,11 +33,11 @@ static void CheckWindow() {
     Check(!window.CopyTo(tensor, kValues - 1), "reject incorrect input capacity");
     for (int row = 0; row < 200; ++row) {
         const float x = (row + 100) * 0.001f;
-        const float raw[8] = {x, 0.4f, 0, std::sqrt(x*x + 0.16f), 3, 4, 12, 13};
-        for (int feature = 0; feature < 8; ++feature) {
-            const float restored = tensor[row*8 + feature] * kScalerScale[feature] + kScalerMean[feature];
+        const float raw[3] = {x, 0.4f, 0.0f};
+        for (int feature = 0; feature < 3; ++feature) {
+            const float restored = tensor[row*3 + feature] * kScalerScale[feature] + kScalerMean[feature];
             Check(std::abs(restored - raw[feature]) < 1e-5f,
-                  "feature order, magnitudes, scaling and chronological ring-buffer copy");
+                  "feature order, scaling and chronological ring-buffer copy");
         }
     }
 

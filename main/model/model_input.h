@@ -13,7 +13,7 @@ constexpr int64_t kMaxSampleIntervalUs = 15000;
 enum class WindowUpdate { Collecting, Ready, Restarted, Invalid };
 
 // Single owner: the inference task. Oldest sample is flattened first, with
-// eight adjacent features per sample, matching a [200, 8] row-major window.
+// three adjacent features per sample, matching a [200, 3] row-major window.
 class ModelInputWindow {
 public:
     WindowUpdate Push(const imu_sample_t &sample);

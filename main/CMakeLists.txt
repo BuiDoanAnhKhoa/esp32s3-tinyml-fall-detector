@@ -1,9 +1,11 @@
 idf_component_register(
     SRCS
         "app/main.c"
+        "app/imu_stream.c"
         "app/fall_detection.cc"
         "drivers/mpu6050.c"
         "drivers/fall_indicator.c"
+        "drivers/sleep_button.c"
         "network/wifi_station.c"
         "network/mqtt_reporter.c"
         "model/model_input.cc"

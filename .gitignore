@@ -20,6 +20,8 @@ managed_components/
 # Python artifacts
 __pycache__/
 *.py[cod]
+.venv/
+captures/
 
 # OS files
 .DS_Store

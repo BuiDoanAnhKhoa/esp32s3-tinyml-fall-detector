@@ -32,3 +32,13 @@ esp_err_t mpu6050_init(mpu6050_handle_t *mpu, gpio_num_t sda_pin, gpio_num_t scl
  * @brief Read 6-axis raw registers in a single burst and convert to physical units.
  */
 esp_err_t mpu6050_read_motion(mpu6050_handle_t *mpu, mpu6050_data_t *data);
+
+/**
+ * @brief Put MPU6050 into low-power sleep mode (set SLEEP bit in PWR_MGMT_1).
+ */
+esp_err_t mpu6050_sleep(mpu6050_handle_t *mpu);
+
+/**
+ * @brief Wake MPU6050 from sleep mode (clear SLEEP bit in PWR_MGMT_1).
+ */
+esp_err_t mpu6050_wake(mpu6050_handle_t *mpu);
