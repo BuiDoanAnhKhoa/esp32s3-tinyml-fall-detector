@@ -45,13 +45,40 @@ menu "MPU6050 Fall Detection Configuration"
         range 1 255
         default 64
 
+    choice FALL_MODEL_ARENA_LOCATION
+        prompt "Model working memory location"
+        default FALL_MODEL_ARENA_PSRAM
+        help
+            Keep PSRAM for the initial INT8 baseline. Compare internal RAM
+            after measuring arena usage and available heap on the device.
+            Allocation fails visibly rather than silently changing location.
+
+        config FALL_MODEL_ARENA_PSRAM
+            bool "PSRAM"
+
+        config FALL_MODEL_ARENA_INTERNAL
+            bool "Internal RAM"
+    endchoice
+
     config FALL_MODEL_ARENA_KB
-        int "Model working memory in PSRAM (KiB)"
-        range 256 4096
+        int "Model working memory (KiB)"
+        range 32 4096
         default 256
         help
             Reserved once at boot. Startup validates that the model fits.
-            The N16R8 board requires octal PSRAM enabled in menuconfig.
+            Size includes tensors and kernel scratch buffers. Use the device's
+            reported working memory plus headroom; host usage can differ.
+            PSRAM placement requires octal PSRAM enabled on the N16R8 board.
+            Internal RAM must also leave room for WiFi, queues and tasks.
+
+    config FALL_MODEL_PROFILE
+        bool "Log detailed inference timing"
+        default n
+        help
+            Log input quantization/copy, Invoke, total Predict, accumulated
+            sample preprocessing time since the previous prediction, queued
+            sample age, and result age in microseconds. MQTT time_ms continues
+            to report total Predict time. Adds timer calls to the hot path.
 
     config FALL_SLEEP_BUTTON_GPIO
         int "Sleep/Wake toggle button GPIO"

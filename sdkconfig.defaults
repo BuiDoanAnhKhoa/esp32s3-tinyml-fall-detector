@@ -22,6 +22,14 @@ CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 CONFIG_FALL_RGB_GPIO=48
 CONFIG_FALL_RGB_BRIGHTNESS=64
 CONFIG_FALL_MODEL_ARENA_KB=256
+CONFIG_FALL_MODEL_ARENA_PSRAM=y
+# Enable detailed timings temporarily when benchmarking on the board.
+# CONFIG_FALL_MODEL_PROFILE is not set
+# INT8 kernels use ESP-NN's optimized ESP32-S3 implementations.
+CONFIG_NN_OPTIMIZED=y
+# CONFIG_NN_SKIP_NUDGE is not set
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
 CONFIG_FALL_SLEEP_BUTTON_GPIO=0
 # WiFi station credentials — change these to your network.
 CONFIG_FALL_WIFI_SSID="yourssid"

@@ -7,7 +7,7 @@
 [![Platform](https://img.shields.io/badge/OS-Linux%20%7C%20macOS-lightgrey.svg)]()
 [![Standard](https://img.shields.io/badge/Standard-C%2B%2B17%20%2F%20C11-blue.svg)]()
 
-A high-performance, real-time edge fall detection system deployed on the **ESP32-S3** dual-core microcontroller. The system samples a 6-axis **MPU-6050** IMU at 100 Hz, runs a 1D-CNN floating-point model (accelerometer-only, 3 features) using **TensorFlow Lite Micro** in PSRAM, signals instant local status via an **addressable WS2812 RGB LED**, and streams live detection telemetry over **WiFi via MQTT**. A hardware **sleep/wake toggle button** allows pausing and resuming sensor capture on demand.
+A real-time edge fall detection system deployed on the **ESP32-S3** dual-core microcontroller. The system samples a 6-axis **MPU-6050** IMU at 100 Hz, runs a fully quantized **INT8 1D-CNN** (accelerometer-only, 3 features) using **TensorFlow Lite Micro and ESP-NN**, signals local status via an **addressable WS2812 RGB LED**, and streams detection telemetry over **WiFi via MQTT**. The tensor arena uses PSRAM by default, with internal RAM selectable for benchmarking. A hardware **sleep/wake toggle button** allows pausing and resuming sensor capture on demand.
 
 ---
 
@@ -26,6 +26,7 @@ A high-performance, real-time edge fall detection system deployed on the **ESP32
 - [Capture MPU Samples on Your Computer](#capture-mpu-samples-on-your-computer)
 - [RGB Indicator Reference](#-rgb-indicator-reference)
 - [Native Host Tests (CI/PC)](#-native-host-tests-cipc)
+- [INT8 Model and Benchmarking](#int8-model-and-benchmarking)
 
 ---
 
@@ -42,7 +43,7 @@ MPU-6050 ------>  |  100 Hz Sensor Task |                     |            | |
                |  |  Validation Checks  |   (256 samples)     |  TFLite    | |
                |  +---------------------+                     |  Micro     | |
                |                                              |  1D-CNN    | |
-               |  +---------------------+                     | (~520 ms)  | |
+               |  +---------------------+                     |   INT8     | |
 WS2812 RGB <----- |  RGB Indicator Task |<-- State Queue -----+            | |
   (Onboard)    |  +---------------------+                     +------+-----+ |
                |                                                     |       |
@@ -78,14 +79,16 @@ Button -------->  | Sleep/Wake Toggle   |--- LED + MQTT status updates       |
   - **Core 1:** Dedicated to preprocessing (standardization, feature scaling, 200-sample sliding window) and neural network inference.
 - **Accelerometer-Only 1D-CNN Model:**
   - Uses only 3 input features (AccX, AccY, AccZ) — no gyroscope required for inference.
-  - Simpler input pipeline, lower CPU cost per sample, and smaller tensor footprint (600 vs 1600 floats).
+  - Input shape `[1,600]`: 200 samples × 3 axes, stored as 600 INT8 bytes. The preprocessing ring buffer retains 600 standardized floats.
+  - Input is standardized and quantized; the INT8 output is dequantized to a probability before applying the exported threshold (approximately 0.20).
   - All 6 axes are still captured and available for serial streaming.
 - **Robust Sensor Data Hygiene:**
   - Strict interval validation ($5000\,\mu\text{s} \le \Delta t \le 15000\,\mu\text{s}$).
   - Automatic detection of dropped I2C reads and sequence gaps.
-  - Rejection of invalid data (NaN/Inf) with automatic window reset.
+  - Rejection of invalid acceleration data (NaN/Inf) with automatic window reset. Gyroscope values are unused by the model.
 - **Optimized Memory Allocation:**
   - Reserves a 256 KiB tensor arena in Octal PSRAM at 80 MHz, keeping internal SRAM free for network buffers and FreeRTOS queues.
+  - Configurable arena size and placement, with startup reporting actual usage. ESP-NN optimized kernels and 240 MHz CPU operation are enabled in project defaults.
 - **Resilient Network & MQTT Client:**
   - WiFi STA mode with automatic event-driven reconnect.
   - Non-blocking MQTT publishing: telemetry is streamed if connected, but network downtime never stalls local fall detection or LED alerts.
@@ -158,17 +161,24 @@ Organized into a clean, domain-driven modular structure:
 │   ├── network/                # Connectivity & Telemetry
 │   │   ├── wifi_station.c / .h # Auto-reconnecting WiFi STA
 │   │   └── mqtt_reporter.c / .h # MQTT client with JSON payload formatter
-│   └── model/                  # Machine Learning artifacts & inference engine
-│       ├── model_data.cc / .h  # 1D-CNN weights (~220 KB flatbuffer)
-│       ├── scaler_data.h       # Feature scaling parameters (mean/scale, 3 features)
+│   ├── new_model/              # Original INT8 export; excluded from the build
+│   │   └── model_data.cc / .h, scaler_data.h
+│   └── model/                  # Active INT8 artifacts & inference engine
+│       ├── model_data.cc / .h  # INT8 1D-CNN (120,752-byte flatbuffer)
+│       ├── scaler_data.h       # Scaling, quantization and detection threshold
 │       ├── model_input.cc / .h # Sliding window & feature transformation
+│       ├── quantized_ops.cc / .h # Quantized padding fix for pinned TFLM kernel
 │       └── model_runtime.cc / .h # TFLite Micro runtime & kernel resolver
 ├── tools/
 │   ├── capture_mpu.py           # USB serial to CSV recorder
+│   ├── prepare_int8_model.py   # Freeze exported intermediate shapes for TFLM
+│   ├── generate_model_fixtures.py # Desktop INT8 regression fixture generator
+│   ├── model_requirements.txt # Optional fixture-generation dependencies
 │   └── requirements.txt        # Python dependency (pyserial)
 └── tests/                      # Native host test suite (runs on PC without hardware)
     ├── CMakeLists.txt
     ├── model_checks.cc
+    ├── model_fixtures.h        # Checked-in NumPy/LiteRT reference inputs & outputs
     └── test_capture_mpu.py     # Parser and simulated serial capture tests
 ```
 
@@ -280,6 +290,7 @@ You should see it listening on `0.0.0.0:1883` or `*:1883`.
    - Set **RGB LED GPIO** (default: 48; use 38 for DevKitC v1.1)
    - Set **Sleep/Wake toggle button GPIO** (default: 0 = BOOT button)
    - Set **Model working memory** (default: 256 KiB)
+   - Keep **Model working memory location → PSRAM** for the initial INT8 run; see benchmarking below for internal RAM comparisons.
    
    Navigate to **WiFi and MQTT Configuration**:
    - Set **WiFi SSID** (your network name)
@@ -316,21 +327,24 @@ mosquitto_sub -t "fall-detector/#" -v
 
 ### Example Output Stream
 
+The following payloads illustrate the format. The `time_ms` values are examples,
+not measured INT8 performance; actual values are reported by the device.
+
 ```text
 fall-detector/online {"status":"online","mode":"active"}
-fall-detector/result {"status":"NORMAL","score":0.0034,"time_ms":521,"mode":"active"}
-fall-detector/result {"status":"NORMAL","score":0.0041,"time_ms":522,"mode":"active"}
-fall-detector/result {"status":"FALL","score":0.6404,"time_ms":518,"mode":"active"}
+fall-detector/result {"status":"NORMAL","score":0.0117,"time_ms":123,"mode":"active"}
+fall-detector/result {"status":"NORMAL","score":0.0000,"time_ms":123,"mode":"active"}
+fall-detector/result {"status":"FALL","score":0.9609,"time_ms":123,"mode":"active"}
 fall-detector/online {"status":"online","mode":"sleep"}
 fall-detector/online {"status":"online","mode":"active"}
-fall-detector/result {"status":"NORMAL","score":0.1362,"time_ms":520,"mode":"active"}
+fall-detector/result {"status":"NORMAL","score":0.0117,"time_ms":123,"mode":"active"}
 ```
 
 ### MQTT Topics Reference
 
 | Topic | Payload Format | QoS | Description |
 |---|---|---|---|
-| `fall-detector/result` | `{"status":"NORMAL"\|"FALL", "score":0.00, "time_ms":520, "mode":"active"}` | 1 | Emitted every prediction window (~1 s). Suppressed for 5 s after a FALL. |
+| `fall-detector/result` | `{"status":"NORMAL"\|"FALL", "score":0.00, "time_ms":123, "mode":"active"}` | 1 | Measured total prediction time in ms. Emitted every prediction window (~1 s). Suppressed for 5 s after a FALL. |
 | `fall-detector/error` | `{"error":"<Description>"}` | 1 | Emitted on hardware read drop or timing fault |
 | `fall-detector/online` | `{"status":"online", "mode":"active"\|"sleep"}` | 0 / 1 | Published on boot, reconnect, and sleep/wake toggle (retained) |
 | `fall-detector/online` | `{"status":"offline"}` | 1 | LWT: broker publishes this when the device disconnects unexpectedly |
@@ -473,8 +487,8 @@ The onboard addressable RGB LED reflects the system's operational state in real-
 | Color | State | Description |
 |---|---|---|
 | 🔵 **Dim Blue** | **Warmup / Init** | Device booting, connecting to WiFi, or filling initial 200-sample window. |
-| ⚫ **Off** | **Normal** | Valid sensor data; fall score is below threshold (`< 0.50`). |
-| 🔴 **Red** | **Fall Detected** | Model detected a fall event (`score >= 0.50`). Updates dynamically. |
+| ⚫ **Off** | **Normal** | Valid sensor data; dequantized score is below the exported threshold (approximately 0.20). |
+| 🔴 **Red** | **Fall Detected** | Dequantized score is at or above the exported threshold. Updates dynamically. |
 | 🟠 **Amber** | **Fault / Error** | I2C bus error, timing jitter, or no inference result for > 5 seconds. |
 | 🩵 **Dim Cyan** | **Sleep Mode** | Device is connected but sensor capture is paused (button toggled). |
 
@@ -482,7 +496,10 @@ The onboard addressable RGB LED reflects the system's operational state in real-
 
 ## 🧪 Native Host Tests (CI/PC)
 
-You can validate the sliding window math, feature scaling, and TensorFlow Lite Micro inference directly on your Linux or macOS machine without physical hardware:
+You can validate sliding windows, feature scaling, INT8 rounding/clipping, tensor
+metadata, and TensorFlow Lite Micro inference directly on your Linux or macOS
+machine without physical hardware. Four synthetic reference windows check all
+600 quantized input bytes and exact output agreement with desktop LiteRT:
 
 ```bash
 # Configure and build native tests
@@ -492,6 +509,92 @@ PATH=/usr/bin:/bin cmake --build /tmp/mpu6050-host-checks
 # Run test suite
 ctest --test-dir /tmp/mpu6050-host-checks --output-on-failure
 ```
+
+The insufficient-arena test deliberately exercises an allocation error. A
+`Failed to allocate` diagnostic in verbose test output is expected when the
+suite finishes with `100% tests passed`.
+
+The checked-in reference fixtures need no Python ML packages to run. To prepare
+a replacement export and regenerate fixtures, use a separate Python environment:
+
+```bash
+python3 -m venv /tmp/mpu6050-model-tools
+/tmp/mpu6050-model-tools/bin/python -m pip install -r tools/model_requirements.txt
+/tmp/mpu6050-model-tools/bin/python tools/prepare_int8_model.py
+# Promote the matching export headers along with the prepared model.
+cp main/new_model/model_data.h main/new_model/scaler_data.h main/model/
+/tmp/mpu6050-model-tools/bin/python tools/generate_model_fixtures.py
+```
+
+Run the native tests again after regeneration. These synthetic fixtures verify
+deployment consistency, not fall-detection accuracy; evaluate the exported
+threshold on labeled recordings before drawing accuracy conclusions.
+
+---
+
+## INT8 Model and Benchmarking
+
+The active model is `main/model/model_data.cc`. The original export remains in
+`main/new_model/` and is excluded from both firmware and host-test builds. Both
+directories define the same symbols, so compile only the active model.
+
+| Property | INT8 deployment |
+|---|---|
+| Model size | 120,752 bytes (117.92 KiB), versus 223,776 bytes for the previous FP32 model |
+| Input | INT8 `[1,600]`, chronological `[AccX, AccY, AccZ]` in g before scaling |
+| Input quantization | Scale `0.19322237372398376`, zero point `-22` |
+| Output | INT8 `[1,1]`; probability = `(output + 128) / 256` |
+| Threshold | Exported double `0.20000000000000004`; INT8 output `-76` is the first fall score |
+| Sampling/window | 100 Hz, 200 samples, stride 100; 2-second initial warmup, then approximately 1 prediction/second |
+| Host arena used | 64,512 bytes with pinned TFLM 1.3.7 and reference kernels on x86-64 |
+| Device arena reservation | 256 KiB PSRAM by default; actual optimized-kernel requirement must be measured on the ESP32-S3 |
+| Device latency | INT8 hardware benchmarking pending; the previous README's approximately 520 ms referred to FP32 |
+
+Preprocessing remains float32 standardization, followed by nearest-even rounding
+and saturation to `[-128,127]`. The runtime validates the model's I/O types,
+shapes, and quantization parameters against `scaler_data.h` before accepting it.
+
+Two compatibility corrections are necessary for this export and the pinned
+`espressif/esp-tflite-micro` 1.3.7 component:
+
+- The export stores six intermediate batch dimensions as 1, although the
+  dilation graph produces batches of 2 or 4. Desktop LiteRT recalculates these
+  at invocation; TFLM uses the stored shapes. `prepare_int8_model.py` resolves
+  them with desktop reference kernels and changes just six bytes in the
+  deployment FlatBuffer. Weights, operator definitions, quantization, and the
+  original export remain unchanged. The generated file records both hashes.
+- The component's `SPACE_TO_BATCH_ND` preparation leaves its padding value
+  unset. `quantized_ops.cc` wraps that registration to set the tensor zero point,
+  so padding represents real zero. This correction is shared by the firmware
+  and host tests. Review it when upgrading TFLM; managed components are unmodified.
+
+For a device comparison:
+
+1. Keep **Model working memory location → PSRAM** and **Model working memory →
+   256 KiB** for the first INT8 run. Enable **Log detailed inference timing**
+   (`CONFIG_FALL_MODEL_PROFILE`) in `idf.py menuconfig`, then build and flash.
+2. Record startup arena usage and multiple steady-state predictions with WiFi
+   and MQTT active. Logs report `input` (quantization/copy), `invoke`, and `total`
+   (`Predict`) in microseconds. `push` is accumulated sample validation and
+   standardization time since the previous prediction; it is outside `total`.
+   `queued` is the latest sample's age when dequeued, including sensor-read time;
+   `result_age` is its age when prediction completes. MQTT `time_ms` remains
+   total `Predict` time, truncated to milliseconds.
+3. Select **Internal RAM** and an arena size based on the **device's** reported
+   usage plus headroom. Startup logs the available and largest contiguous block.
+   Confirm that WiFi, MQTT, queues and tasks still have sufficient memory. An
+   allocation failure is reported explicitly; there is no silent PSRAM fallback.
+4. Compare median, p95 and maximum latency for the two placements under the same
+   input and configuration. Check for missing samples, stale queues, inference
+   errors, and sleep/wake or indicator regressions. Use labeled recordings to
+   compare detection outcomes at the new threshold.
+5. Keep the placement that performs best while remaining stable. Disable detailed
+   profiling for normal operation. CPU speed (240 MHz), compiler optimization,
+   ESP-NN optimized kernels, and bit-exact requantization defaults are already set.
+
+Host timings use reference kernels and are not ESP32-S3 speed estimates. Reducing
+inference time does not change the two-second window or one-second prediction
+stride. No INT8 hardware speedup is claimed until measured on the board.
 
 ---
 

@@ -16,7 +16,11 @@ constexpr int64_t kPredictionBudgetUs = 1000000;
 QueueHandle_t sample_queue;
 QueueHandle_t state_queue;
 fall_detection::ModelInputWindow window;
+#if CONFIG_FALL_MODEL_PROFILE
+fall_detection::ModelRuntime model(esp_timer_get_time);
+#else
 fall_detection::ModelRuntime model;
+#endif
 
 // Faults can happen at 100 Hz. Log the first one, then at most once per five
 // seconds so diagnostics do not become another source of timing problems.
@@ -34,13 +38,20 @@ void Report(fall_state_t state) {
 
 void InferenceTask(void *) {
     const size_t arena_size = CONFIG_FALL_MODEL_ARENA_KB * 1024;
-    ESP_LOGI("FALL", "Model starting: PSRAM free=%u, largest block=%u, needed=%u bytes",
-             unsigned(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)),
-             unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM)), unsigned(arena_size));
+#if CONFIG_FALL_MODEL_ARENA_INTERNAL
+    constexpr uint32_t arena_caps = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+    constexpr const char *arena_location = "internal RAM";
+#else
+    constexpr uint32_t arena_caps = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
+    constexpr const char *arena_location = "PSRAM";
+#endif
+    ESP_LOGI("FALL", "INT8 model starting: %s free=%u, largest block=%u, needed=%u bytes",
+             arena_location, unsigned(heap_caps_get_free_size(arena_caps)),
+             unsigned(heap_caps_get_largest_free_block(arena_caps)), unsigned(arena_size));
     auto *arena = static_cast<uint8_t *>(heap_caps_aligned_alloc(
-        16, arena_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+        16, arena_size, arena_caps));
     if (!arena) {
-        ESP_LOGE("FALL", "Cannot allocate model memory in PSRAM; LED is amber");
+        ESP_LOGE("FALL", "Cannot allocate model memory in %s; LED is amber", arena_location);
         Report(FALL_STATE_ERROR);
         vTaskDelete(nullptr);
         return;
@@ -51,7 +62,8 @@ void InferenceTask(void *) {
         vTaskDelete(nullptr);
         return;
     }
-    ESP_LOGI("FALL", "Model ready; working memory=%u bytes. Collecting 200 samples...", unsigned(model.ArenaUsedBytes()));
+    ESP_LOGI("FALL", "INT8 model ready; working memory=%u/%u bytes in %s, threshold=%.2f. Collecting 200 samples...",
+             unsigned(model.ArenaUsedBytes()), unsigned(arena_size), arena_location, kFallThreshold);
     xQueueReset(sample_queue);
     Report(FALL_STATE_WARMUP);
     bool warming_up = true;
@@ -60,6 +72,10 @@ void InferenceTask(void *) {
     int64_t previous_timestamp = 0;
 
     int64_t fall_cooldown_until = 0;
+#if CONFIG_FALL_MODEL_PROFILE
+    int64_t preprocessing_us = 0;
+    unsigned preprocessing_samples = 0;
+#endif
 
     for (;;) {
         imu_sample_t sample;
@@ -74,7 +90,8 @@ void InferenceTask(void *) {
             Report(FALL_STATE_ERROR);
             continue;
         }
-        if (esp_timer_get_time() - sample.timestamp_us > kMaxQueuedAgeUs) {
+        const int64_t queued_age_us = esp_timer_get_time() - sample.timestamp_us;
+        if (queued_age_us > kMaxQueuedAgeUs) {
             if (LogFaultNow()) ESP_LOGW("FALL", "Queued samples are over 2 seconds old; restarting window");
             window.Reset();
             warming_up = true;
@@ -82,7 +99,14 @@ void InferenceTask(void *) {
             Report(FALL_STATE_ERROR);
             continue;
         }
+#if CONFIG_FALL_MODEL_PROFILE
+        const int64_t push_started = esp_timer_get_time();
+#endif
         const auto update = window.Push(sample);
+#if CONFIG_FALL_MODEL_PROFILE
+        preprocessing_us += esp_timer_get_time() - push_started;
+        ++preprocessing_samples;
+#endif
         const uint32_t sequence_step = sample.sequence - previous_sequence;
         const int64_t interval_us = sample.timestamp_us - previous_timestamp;
         previous_sequence = sample.sequence;
@@ -109,6 +133,15 @@ void InferenceTask(void *) {
         const int64_t started = esp_timer_get_time();
         const bool valid = model.Predict(window, &score);
         const int64_t elapsed = esp_timer_get_time() - started;
+#if CONFIG_FALL_MODEL_PROFILE
+        const auto &timing = model.LastTiming();
+        ESP_LOGI("FALL", "Profile: input=%lld us, invoke=%lld us, total=%lld us, push=%lld us/%u samples, queued=%lld us, result_age=%lld us",
+                 (long long)timing.input_us, (long long)timing.invoke_us, (long long)elapsed,
+                 (long long)preprocessing_us, preprocessing_samples, (long long)queued_age_us,
+                 (long long)(esp_timer_get_time() - sample.timestamp_us));
+        preprocessing_us = 0;
+        preprocessing_samples = 0;
+#endif
         if (!valid || elapsed > kPredictionBudgetUs) {
             if (LogFaultNow()) {
                 if (!valid) ESP_LOGE("FALL", "Prediction failed: %s", model.LastError());

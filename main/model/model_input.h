@@ -19,6 +19,8 @@ public:
     WindowUpdate Push(const imu_sample_t &sample);
     void Reset();
     bool CopyTo(float *destination, std::size_t count) const;
+    // Standardized values are quantized once while copying into the INT8 tensor.
+    bool CopyQuantizedTo(int8_t *destination, std::size_t count) const;
 
 private:
     float features_[kWindowSize][kNumFeatures] = {};

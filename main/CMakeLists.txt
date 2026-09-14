@@ -10,6 +10,7 @@ idf_component_register(
         "network/mqtt_reporter.c"
         "model/model_input.cc"
         "model/model_runtime.cc"
+        "model/quantized_ops.cc"
         "model/model_data.cc"
     INCLUDE_DIRS
         "."

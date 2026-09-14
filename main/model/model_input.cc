@@ -3,7 +3,8 @@
 #include <cmath>
 #include <cstring>
 
-static_assert(kNumFeatures == 3 && kInputSize == 3);
+static_assert(kNumFeatures == 3 && kInputSize == kWindowSize * kNumFeatures);
+static_assert(kScalerSize == kNumFeatures);
 static_assert(kWindowSize == 200 && kWindowStep > 0 && kWindowStep <= kWindowSize);
 static_assert(sizeof(kScalerMean) / sizeof(float) == kNumFeatures);
 static_assert(sizeof(kScalerScale) / sizeof(float) == kNumFeatures);
@@ -66,6 +67,19 @@ bool ModelInputWindow::CopyTo(float *destination, std::size_t count) const {
         std::memcpy(destination + i * kNumFeatures,
                     features_[(next_ + i) % kWindowSize],
                     kNumFeatures * sizeof(float));
+    }
+    return true;
+}
+
+bool ModelInputWindow::CopyQuantizedTo(int8_t *destination, std::size_t count) const {
+    if (!destination || count != kTensorValues || count_ != kWindowSize) {
+        return false;
+    }
+    for (int row = 0; row < kWindowSize; ++row) {
+        const float *features = features_[(next_ + row) % kWindowSize];
+        for (int axis = 0; axis < kNumFeatures; ++axis) {
+            destination[row * kNumFeatures + axis] = QuantizeScaledInput(features[axis]);
+        }
     }
     return true;
 }

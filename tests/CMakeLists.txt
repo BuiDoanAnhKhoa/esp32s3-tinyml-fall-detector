@@ -45,7 +45,8 @@ target_compile_options(tflm_host PUBLIC -fno-exceptions -fno-rtti)
 target_compile_definitions(tflm_host PUBLIC TF_LITE_STATIC_MEMORY TF_LITE_DISABLE_X86_NEON)
 
 add_executable(model_checks model_checks.cc
-    "${APP}/model/model_input.cc" "${APP}/model/model_runtime.cc" "${APP}/model/model_data.cc")
+    "${APP}/model/model_input.cc" "${APP}/model/model_runtime.cc"
+    "${APP}/model/quantized_ops.cc" "${APP}/model/model_data.cc")
 target_include_directories(model_checks PRIVATE "${APP}" "${APP}/model" "${APP}/app")
 target_link_libraries(model_checks PRIVATE tflm_host)
 target_link_options(model_checks PRIVATE -Wl,--gc-sections)
