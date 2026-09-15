@@ -20,12 +20,12 @@ spec.loader.exec_module(capture)
 
 
 def record(sequence=1, timestamp=10000):
-    return f"MPU1,{sequence},{timestamp},0.1,-0.2,1.0,2.0,-3.0,4.0\r\n".encode()
+    return f"MPU1,{sequence},{timestamp},0.1,-0.2,1.0\r\n".encode()
 
 
 class ParserTests(unittest.TestCase):
     def test_units_and_logs(self):
-        self.assertEqual(capture.parse_sample(record()), (1, 10000, 0.1, -0.2, 1, 2, -3, 4))
+        self.assertEqual(capture.parse_sample(record()), (1, 10000, 0.1, -0.2, 1.0))
         self.assertIsNone(capture.parse_sample(b"\x1b[32mI (12) APP: ready\x1b[0m"))
 
     def test_invalid_samples(self):
@@ -108,7 +108,6 @@ class SerialCaptureTests(unittest.TestCase):
         self.assertEqual(code, 0, stderr)
         self.assertEqual([row["sequence"] for row in rows], ["1", "3", "4"])
         self.assertEqual(list(rows[0]), list(capture.FIELDS))
-        self.assertEqual(rows[0]["gyro_y_dps"], "-3.0")
         self.assertTrue(rows[0]["host_time_utc"].endswith("+00:00"))
         self.assertIn("missing=1", stderr)
         self.assertIn("malformed=1", stderr)

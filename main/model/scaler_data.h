@@ -11,7 +11,7 @@ constexpr int kInputSize = 600;
 constexpr int kScalerSize = 3;
 // Dequantized probability >= kFallThreshold -> Fall.
 // Keep the Python threshold as double to preserve its comparison semantics.
-constexpr double kFallThreshold = 0.20000000000000004;
+constexpr double kFallThreshold = 0.8;
 
 // Flattened window: [AccX, AccY, AccZ] for each time step, oldest first.
 constexpr float kScalerMean[kScalerSize] = {-3.882899880e-03f, -9.565066695e-01f, -7.179296762e-02f};

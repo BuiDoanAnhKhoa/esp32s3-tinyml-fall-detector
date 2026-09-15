@@ -96,6 +96,7 @@ void app_main(void) {
     // Start WiFi connection in the background.
     // MQTT connects once WiFi obtains an IP; both retry automatically.
     // Failures here are non-fatal: fall detection works without network.
+#if CONFIG_FALL_WIFI_ENABLE
     if (wifi_station_init() == ESP_OK) {
         if (wifi_station_wait_connected(15000) == ESP_OK) {
             ESP_LOGI("APP", "WiFi connected");
@@ -108,6 +109,9 @@ void app_main(void) {
     if (mqtt_reporter_init() != ESP_OK) {
         ESP_LOGW("APP", "MQTT init failed; continuing without MQTT");
     }
+#else
+    ESP_LOGI("APP", "WiFi/MQTT disabled by config; running offline");
+#endif
 
     state_queue = xQueueCreate(1, sizeof(fall_state_t));
     ESP_ERROR_CHECK(state_queue ? ESP_OK : ESP_ERR_NO_MEM);

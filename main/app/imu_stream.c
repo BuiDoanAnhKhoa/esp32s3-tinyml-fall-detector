@@ -23,10 +23,9 @@ static void stream_task(void *arg) {
             // One stdio call keeps each record together with other console logs.
             // Under 160 bytes/sample at the driver's configured sensor ranges:
             // under 160 kbit/s including UART 8N1 framing at 100 Hz.
-            printf("MPU1,%" PRIu32 ",%" PRId64 ",%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
+            printf("MPU1,%" PRIu32 ",%" PRId64 ",%.6f,%.6f,%.6f\n",
                    sample.sequence, sample.timestamp_us,
-                   (double)sample.acc[0], (double)sample.acc[1], (double)sample.acc[2],
-                   (double)sample.gyro[0], (double)sample.gyro[1], (double)sample.gyro[2]);
+                   (double)sample.acc[0], (double)sample.acc[1], (double)sample.acc[2]);
             fflush(stdout);
         }
     }

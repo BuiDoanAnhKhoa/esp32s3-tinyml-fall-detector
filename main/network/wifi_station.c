@@ -1,12 +1,15 @@
 #include "wifi_station.h"
 
+#include "sdkconfig.h"
+
+#if CONFIG_FALL_WIFI_ENABLE
+
 #include <string.h>
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
-#include "sdkconfig.h"
 
 #define WIFI_CONNECTED_BIT BIT0
 
@@ -76,3 +79,11 @@ esp_err_t wifi_station_wait_connected(int timeout_ms) {
 bool wifi_station_is_connected(void) {
     return s_connected;
 }
+
+#else  /* WiFi disabled */
+
+esp_err_t wifi_station_init(void) { return ESP_OK; }
+esp_err_t wifi_station_wait_connected(int timeout_ms) { (void)timeout_ms; return ESP_ERR_TIMEOUT; }
+bool wifi_station_is_connected(void) { return false; }
+
+#endif

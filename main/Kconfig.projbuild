@@ -95,21 +95,31 @@ endmenu
 
 menu "WiFi and MQTT Configuration"
 
+    config FALL_WIFI_ENABLE
+        bool "Enable WiFi and MQTT"
+        default y
+        help
+            Disable to run fully offline (no WiFi current spike on boot).
+            Useful for battery-powered operation or standalone deployment.
+
     config FALL_WIFI_SSID
         string "WiFi SSID"
         default "myssid"
+        depends on FALL_WIFI_ENABLE
         help
             SSID (network name) to connect to.
 
     config FALL_WIFI_PASSWORD
         string "WiFi Password"
         default "mypassword"
+        depends on FALL_WIFI_ENABLE
         help
             WiFi password (WPA2-PSK).
 
     config FALL_MQTT_BROKER_IP
         string "MQTT Broker IP Address"
         default "192.168.1.100"
+        depends on FALL_WIFI_ENABLE
         help
             IP address of the machine running the Mosquitto MQTT broker.
             Find it with: hostname -I
@@ -118,6 +128,7 @@ menu "WiFi and MQTT Configuration"
         int "MQTT Broker Port"
         range 1 65535
         default 1883
+        depends on FALL_WIFI_ENABLE
         help
             TCP port of the MQTT broker (default 1883).
 

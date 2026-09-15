@@ -26,7 +26,7 @@ A real-time edge fall detection system deployed on the **ESP32-S3** dual-core mi
 - [Capture MPU Samples on Your Computer](#capture-mpu-samples-on-your-computer)
 - [RGB Indicator Reference](#-rgb-indicator-reference)
 - [Native Host Tests (CI/PC)](#-native-host-tests-cipc)
-- [INT8 Model and Benchmarking](#int8-model-and-benchmarking)
+- [INT8 Model and Benchmarking](docs/model.md)
 
 ---
 
@@ -91,6 +91,7 @@ Button -------->  | Sleep/Wake Toggle   |--- LED + MQTT status updates       |
   - Configurable arena size and placement, with startup reporting actual usage. ESP-NN optimized kernels and 240 MHz CPU operation are enabled in project defaults.
 - **Resilient Network & MQTT Client:**
   - WiFi STA mode with automatic event-driven reconnect.
+  - **Offline Mode:** If you are running on batteries or do not need network connectivity, you can disable the WiFi/MQTT stack entirely to save power. Uncheck `Enable WiFi and MQTT` under `WiFi and MQTT Configuration` in `idf.py menuconfig`.
   - Non-blocking MQTT publishing: telemetry is streamed if connected, but network downtime never stalls local fall detection or LED alerts.
   - Configured with MQTT **Last Will and Testament (LWT)** to detect device disconnection instantly.
   - **5-second cooldown** after a FALL detection to avoid redundant MQTT messages.
@@ -161,14 +162,18 @@ Organized into a clean, domain-driven modular structure:
 │   ├── network/                # Connectivity & Telemetry
 │   │   ├── wifi_station.c / .h # Auto-reconnecting WiFi STA
 │   │   └── mqtt_reporter.c / .h # MQTT client with JSON payload formatter
-│   ├── new_model/              # Original INT8 export; excluded from the build
-│   │   └── model_data.cc / .h, scaler_data.h
 │   └── model/                  # Active INT8 artifacts & inference engine
 │       ├── model_data.cc / .h  # INT8 1D-CNN (120,752-byte flatbuffer)
 │       ├── scaler_data.h       # Scaling, quantization and detection threshold
 │       ├── model_input.cc / .h # Sliding window & feature transformation
 │       ├── quantized_ops.cc / .h # Quantized padding fix for pinned TFLM kernel
 │       └── model_runtime.cc / .h # TFLite Micro runtime & kernel resolver
+├── models/
+│   └── source/                 # Original model export; not compiled
+│       ├── fall_model_int8.tflite
+│       └── scaler_data.h       # Matching exported preprocessing parameters
+├── docs/
+│   └── model.md                # Model provenance, preparation & benchmarking
 ├── tools/
 │   ├── capture_mpu.py           # USB serial to CSV recorder
 │   ├── prepare_int8_model.py   # Freeze exported intermediate shapes for TFLM
@@ -290,7 +295,7 @@ You should see it listening on `0.0.0.0:1883` or `*:1883`.
    - Set **RGB LED GPIO** (default: 48; use 38 for DevKitC v1.1)
    - Set **Sleep/Wake toggle button GPIO** (default: 0 = BOOT button)
    - Set **Model working memory** (default: 256 KiB)
-   - Keep **Model working memory location → PSRAM** for the initial INT8 run; see benchmarking below for internal RAM comparisons.
+   - Keep **Model working memory location → PSRAM** for the initial INT8 run; see [the model guide](docs/model.md) for internal RAM comparisons.
    
    Navigate to **WiFi and MQTT Configuration**:
    - Set **WiFi SSID** (your network name)
@@ -437,8 +442,8 @@ are ignored by Git. Python 3.10 or newer is required.
 ### CSV format and capture health
 
 ```csv
-host_time_utc,sequence,device_timestamp_us,acc_x_g,acc_y_g,acc_z_g,gyro_x_dps,gyro_y_dps,gyro_z_dps
-2026-09-10T03:00:00.123456+00:00,123,4567890,0.012,-0.004,1.002,0.13,-0.27,0.04
+host_time_utc,sequence,device_timestamp_us,acc_x_g,acc_y_g,acc_z_g
+2026-09-10T03:00:00.123456+00:00,123,4567890,0.012,-0.004,1.002
 ```
 
 - `host_time_utc`: when Python processes the received record; USB buffering can
@@ -447,10 +452,10 @@ host_time_utc,sequence,device_timestamp_us,acc_x_g,acc_y_g,acc_z_g,gyro_x_dps,gy
   before the I2C read. It restarts when the board reboots.
 - `sequence`: unsigned 32-bit counter advancing on each acquisition attempt,
   including failed sensor reads. It wraps naturally.
-- Acceleration is in **g**; angular velocity is in **degrees/second**.
+- Acceleration is in **g**.
 
 The firmware's versioned line format is
-`MPU1,sequence,timestamp_us,ax,ay,az,gx,gy,gz`. The recorder skips console logs,
+`MPU1,sequence,timestamp_us,ax,ay,az`. The recorder skips console logs,
 rejects malformed/non-finite records, and handles lines split across serial reads.
 It prints capture statistics every five seconds and at exit. `missing` counts
 sequence gaps between received samples; `timing_gaps` counts device intervals
@@ -488,7 +493,7 @@ The onboard addressable RGB LED reflects the system's operational state in real-
 |---|---|---|
 | 🔵 **Dim Blue** | **Warmup / Init** | Device booting, connecting to WiFi, or filling initial 200-sample window. |
 | ⚫ **Off** | **Normal** | Valid sensor data; dequantized score is below the exported threshold (approximately 0.20). |
-| 🔴 **Red** | **Fall Detected** | Dequantized score is at or above the exported threshold. Updates dynamically. |
+| 🔴 **Red** | **Fall Detected** | Dequantized score is at or above the exported threshold. Holds for 5 seconds for visibility. |
 | 🟠 **Amber** | **Fault / Error** | I2C bus error, timing jitter, or no inference result for > 5 seconds. |
 | 🩵 **Dim Cyan** | **Sleep Mode** | Device is connected but sensor capture is paused (button toggled). |
 
@@ -514,87 +519,9 @@ The insufficient-arena test deliberately exercises an allocation error. A
 `Failed to allocate` diagnostic in verbose test output is expected when the
 suite finishes with `100% tests passed`.
 
-The checked-in reference fixtures need no Python ML packages to run. To prepare
-a replacement export and regenerate fixtures, use a separate Python environment:
-
-```bash
-python3 -m venv /tmp/mpu6050-model-tools
-/tmp/mpu6050-model-tools/bin/python -m pip install -r tools/model_requirements.txt
-/tmp/mpu6050-model-tools/bin/python tools/prepare_int8_model.py
-# Promote the matching export headers along with the prepared model.
-cp main/new_model/model_data.h main/new_model/scaler_data.h main/model/
-/tmp/mpu6050-model-tools/bin/python tools/generate_model_fixtures.py
-```
-
-Run the native tests again after regeneration. These synthetic fixtures verify
-deployment consistency, not fall-detection accuracy; evaluate the exported
-threshold on labeled recordings before drawing accuracy conclusions.
-
----
-
-## INT8 Model and Benchmarking
-
-The active model is `main/model/model_data.cc`. The original export remains in
-`main/new_model/` and is excluded from both firmware and host-test builds. Both
-directories define the same symbols, so compile only the active model.
-
-| Property | INT8 deployment |
-|---|---|
-| Model size | 120,752 bytes (117.92 KiB), versus 223,776 bytes for the previous FP32 model |
-| Input | INT8 `[1,600]`, chronological `[AccX, AccY, AccZ]` in g before scaling |
-| Input quantization | Scale `0.19322237372398376`, zero point `-22` |
-| Output | INT8 `[1,1]`; probability = `(output + 128) / 256` |
-| Threshold | Exported double `0.20000000000000004`; INT8 output `-76` is the first fall score |
-| Sampling/window | 100 Hz, 200 samples, stride 100; 2-second initial warmup, then approximately 1 prediction/second |
-| Host arena used | 64,512 bytes with pinned TFLM 1.3.7 and reference kernels on x86-64 |
-| Device arena reservation | 256 KiB PSRAM by default; actual optimized-kernel requirement must be measured on the ESP32-S3 |
-| Device latency | INT8 hardware benchmarking pending; the previous README's approximately 520 ms referred to FP32 |
-
-Preprocessing remains float32 standardization, followed by nearest-even rounding
-and saturation to `[-128,127]`. The runtime validates the model's I/O types,
-shapes, and quantization parameters against `scaler_data.h` before accepting it.
-
-Two compatibility corrections are necessary for this export and the pinned
-`espressif/esp-tflite-micro` 1.3.7 component:
-
-- The export stores six intermediate batch dimensions as 1, although the
-  dilation graph produces batches of 2 or 4. Desktop LiteRT recalculates these
-  at invocation; TFLM uses the stored shapes. `prepare_int8_model.py` resolves
-  them with desktop reference kernels and changes just six bytes in the
-  deployment FlatBuffer. Weights, operator definitions, quantization, and the
-  original export remain unchanged. The generated file records both hashes.
-- The component's `SPACE_TO_BATCH_ND` preparation leaves its padding value
-  unset. `quantized_ops.cc` wraps that registration to set the tensor zero point,
-  so padding represents real zero. This correction is shared by the firmware
-  and host tests. Review it when upgrading TFLM; managed components are unmodified.
-
-For a device comparison:
-
-1. Keep **Model working memory location → PSRAM** and **Model working memory →
-   256 KiB** for the first INT8 run. Enable **Log detailed inference timing**
-   (`CONFIG_FALL_MODEL_PROFILE`) in `idf.py menuconfig`, then build and flash.
-2. Record startup arena usage and multiple steady-state predictions with WiFi
-   and MQTT active. Logs report `input` (quantization/copy), `invoke`, and `total`
-   (`Predict`) in microseconds. `push` is accumulated sample validation and
-   standardization time since the previous prediction; it is outside `total`.
-   `queued` is the latest sample's age when dequeued, including sensor-read time;
-   `result_age` is its age when prediction completes. MQTT `time_ms` remains
-   total `Predict` time, truncated to milliseconds.
-3. Select **Internal RAM** and an arena size based on the **device's** reported
-   usage plus headroom. Startup logs the available and largest contiguous block.
-   Confirm that WiFi, MQTT, queues and tasks still have sufficient memory. An
-   allocation failure is reported explicitly; there is no silent PSRAM fallback.
-4. Compare median, p95 and maximum latency for the two placements under the same
-   input and configuration. Check for missing samples, stale queues, inference
-   errors, and sleep/wake or indicator regressions. Use labeled recordings to
-   compare detection outcomes at the new threshold.
-5. Keep the placement that performs best while remaining stable. Disable detailed
-   profiling for normal operation. CPU speed (240 MHz), compiler optimization,
-   ESP-NN optimized kernels, and bit-exact requantization defaults are already set.
-
-Host timings use reference kernels and are not ESP32-S3 speed estimates. Reducing
-inference time does not change the two-second window or one-second prediction
-stride. No INT8 hardware speedup is claimed until measured on the board.
+The checked-in reference fixtures need no Python ML packages to run. See
+[the model guide](docs/model.md) for export preparation, fixture regeneration,
+compatibility corrections, and device benchmarking.
 
 ---
 

@@ -72,6 +72,7 @@ void InferenceTask(void *) {
     int64_t previous_timestamp = 0;
 
     int64_t fall_cooldown_until = 0;
+    int64_t led_hold_until = 0;
 #if CONFIG_FALL_MODEL_PROFILE
     int64_t preprocessing_us = 0;
     unsigned preprocessing_samples = 0;
@@ -156,15 +157,22 @@ void InferenceTask(void *) {
         } else {
             warming_up = false;
             collection_state = FALL_STATE_WARMUP;
-            Report(score >= kFallThreshold ? FALL_STATE_DETECTED : FALL_STATE_NORMAL);
-            ESP_LOGI("FALL", "%s: score=%.4f (threshold=%.2f), time=%lld ms",
-                     score >= kFallThreshold ? "FALL" : "NORMAL", double(score), double(kFallThreshold), (long long)(elapsed / 1000));
+            const bool is_fall = score >= kFallThreshold;
             const int64_t now = esp_timer_get_time();
+            if (is_fall) {
+                led_hold_until = now + 1000000;  // hold red LED for 5 s
+            }
+            // Keep showing FALL_STATE_DETECTED while the hold timer is active,
+            // even if the current prediction is NORMAL.
+            const bool show_fall = is_fall || now < led_hold_until;
+            Report(show_fall ? FALL_STATE_DETECTED : FALL_STATE_NORMAL);
+            ESP_LOGI("FALL", "%s: score=%.4f (threshold=%.2f), time=%lld ms",
+                     is_fall ? "FALL" : "NORMAL", double(score), double(kFallThreshold), (long long)(elapsed / 1000));
             if (now >= fall_cooldown_until) {
                 mqtt_reporter_publish_result(
-                    score >= kFallThreshold ? "FALL" : "NORMAL",
+                    is_fall ? "FALL" : "NORMAL",
                     score, (int)(elapsed / 1000));
-                if (score >= kFallThreshold) {
+                if (is_fall) {
                     fall_cooldown_until = now + 5000000;  // 5 s
                 }
             }

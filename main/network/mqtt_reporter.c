@@ -1,10 +1,13 @@
 #include "mqtt_reporter.h"
 
+#include "sdkconfig.h"
+
+#if CONFIG_FALL_WIFI_ENABLE
+
 #include <stdio.h>
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "mqtt_client.h"
-#include "sdkconfig.h"
 
 static const char *TAG = "MQTT";
 static esp_mqtt_client_handle_t s_client = NULL;
@@ -110,3 +113,13 @@ void mqtt_reporter_publish_sleep(bool is_sleeping) {
         : "{\"status\":\"online\",\"mode\":\"active\"}";
     esp_mqtt_client_publish(s_client, "fall-detector/online", payload, 0, 1, 1);
 }
+
+#else  /* WiFi disabled — all functions are no-ops */
+
+esp_err_t mqtt_reporter_init(void) { return ESP_OK; }
+void mqtt_reporter_publish_result(const char *s, float sc, int t) { (void)s; (void)sc; (void)t; }
+void mqtt_reporter_publish_error(const char *m) { (void)m; }
+bool mqtt_reporter_is_connected(void) { return false; }
+void mqtt_reporter_publish_sleep(bool s) { (void)s; }
+
+#endif

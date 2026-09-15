@@ -14,18 +14,17 @@ import time
 FIELDS = (
     "host_time_utc", "sequence", "device_timestamp_us",
     "acc_x_g", "acc_y_g", "acc_z_g",
-    "gyro_x_dps", "gyro_y_dps", "gyro_z_dps",
 )
 MAX_LINE_BYTES = 512
 
 
 def parse_sample(line):
-    """Return (sequence, timestamp, six axes), None for logs; reject bad records."""
+    """Return (sequence, timestamp, three axes), None for logs; reject bad records."""
     if not line.startswith(b"MPU1,"):
         return None
     parts = line.decode("ascii").strip().split(",")
-    if len(parts) != 9:
-        raise ValueError("expected sequence, timestamp and six axes")
+    if len(parts) != 6:
+        raise ValueError("expected sequence, timestamp and three axes")
     sequence, timestamp = int(parts[1]), int(parts[2])
     axes = tuple(float(value) for value in parts[3:])
     if not 0 <= sequence <= 0xFFFFFFFF or not 0 <= timestamp <= 0x7FFFFFFFFFFFFFFF:
