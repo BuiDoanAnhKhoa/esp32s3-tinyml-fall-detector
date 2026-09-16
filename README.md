@@ -7,7 +7,7 @@
 [![Platform](https://img.shields.io/badge/OS-Linux%20%7C%20macOS-lightgrey.svg)]()
 [![Standard](https://img.shields.io/badge/Standard-C%2B%2B17%20%2F%20C11-blue.svg)]()
 
-A real-time edge fall detection system deployed on the **ESP32-S3** dual-core microcontroller. The system samples a 6-axis **MPU-6050** IMU at 100 Hz, runs a fully quantized **INT8 1D-CNN** (accelerometer-only, 3 features) using **TensorFlow Lite Micro and ESP-NN**, signals local status via an **addressable WS2812 RGB LED**, and streams detection telemetry over **WiFi via MQTT**. The tensor arena uses PSRAM by default, with internal RAM selectable for benchmarking. A hardware **sleep/wake toggle button** allows pausing and resuming sensor capture on demand.
+A real-time edge fall detection system deployed on the **ESP32-S3** dual-core microcontroller. The system samples a 6-axis **MPU-6050** IMU at 100 Hz, runs a fully quantized **INT8 1D-CNN** (accelerometer-only, 3 features) using **TensorFlow Lite Micro and ESP-NN**, signals local status via an **addressable WS2812 RGB LED**, and streams detection telemetry over **WiFi via MQTT**. The tensor arena uses **Internal RAM** for maximum inference speed. A hardware **sleep/wake toggle button** allows pausing and resuming sensor capture on demand.
 
 ---
 
@@ -87,7 +87,7 @@ Button -------->  | Sleep/Wake Toggle   |--- LED + MQTT status updates       |
   - Automatic detection of dropped I2C reads and sequence gaps.
   - Rejection of invalid acceleration data (NaN/Inf) with automatic window reset. Gyroscope values are unused by the model.
 - **Optimized Memory Allocation:**
-  - Reserves a 256 KiB tensor arena in Octal PSRAM at 80 MHz, keeping internal SRAM free for network buffers and FreeRTOS queues.
+  - Reserves a 96 KiB tensor arena in internal SRAM for maximum execution speed, leaving PSRAM free for network buffers or other tasks.
   - Configurable arena size and placement, with startup reporting actual usage. ESP-NN optimized kernels and 240 MHz CPU operation are enabled in project defaults.
 - **Resilient Network & MQTT Client:**
   - WiFi STA mode with automatic event-driven reconnect.
@@ -107,7 +107,7 @@ Button -------->  | Sleep/Wake Toggle   |--- LED + MQTT status updates       |
 ## 🔌 Hardware & Pinout
 
 ### Recommended Hardware
-- **MCU:** ESP32-S3-DevKitC-1 (N16R8: 16 MB Flash, 8 MB Octal PSRAM)
+- **MCU:** ESP32-S3-DevKitC-1 (N16R8, or any ESP32-S3 with sufficient internal RAM)
 - **Sensor:** MPU-6050 6-Axis Accelerometer & Gyroscope module
 - **Indicator:** Onboard WS2812 Addressable RGB LED
 - **Button:** Momentary push button (or use the onboard BOOT button on GPIO 0)
@@ -143,7 +143,7 @@ Organized into a clean, domain-driven modular structure:
 ```text
 ├── CMakeLists.txt              # Root build script
 ├── partitions.csv              # Custom 3 MiB app partition table
-├── sdkconfig.defaults          # Default hardware, PSRAM & network configuration
+├── sdkconfig.defaults          # Default hardware, internal RAM & network configuration
 ├── .gitignore                  # Excludes build output, venv, and component caches
 ├── main/
 │   ├── CMakeLists.txt          # Component registration & include paths
@@ -295,7 +295,7 @@ You should see it listening on `0.0.0.0:1883` or `*:1883`.
    - Set **RGB LED GPIO** (default: 48; use 38 for DevKitC v1.1)
    - Set **Sleep/Wake toggle button GPIO** (default: 0 = BOOT button)
    - Set **Model working memory** (default: 256 KiB)
-   - Keep **Model working memory location → PSRAM** for the initial INT8 run; see [the model guide](docs/model.md) for internal RAM comparisons.
+   - Ensure **Model working memory location → Internal RAM** is selected for maximum execution speed.
    
    Navigate to **WiFi and MQTT Configuration**:
    - Set **WiFi SSID** (your network name)

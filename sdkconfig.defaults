@@ -21,8 +21,8 @@ CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 # GPIO48 is provisional until the exact board/revision is confirmed.
 CONFIG_FALL_RGB_GPIO=48
 CONFIG_FALL_RGB_BRIGHTNESS=64
-CONFIG_FALL_MODEL_ARENA_KB=256
-CONFIG_FALL_MODEL_ARENA_PSRAM=y
+CONFIG_FALL_MODEL_ARENA_KB=96
+CONFIG_FALL_MODEL_ARENA_INTERNAL=y
 # Enable detailed timings temporarily when benchmarking on the board.
 # CONFIG_FALL_MODEL_PROFILE is not set
 # INT8 kernels use ESP-NN's optimized ESP32-S3 implementations.
