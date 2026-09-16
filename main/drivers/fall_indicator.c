@@ -11,7 +11,7 @@ static esp_err_t show_state(fall_state_t state) {
     uint32_t red = 0, green = 0, blue = 0;
     switch (state) {
     case FALL_STATE_WARMUP: blue = 8; break;
-    case FALL_STATE_DETECTED: red = CONFIG_FALL_RGB_BRIGHTNESS; break;
+    case FALL_STATE_DETECTED: red = CONFIG_FALL_RGB_BRIGHTNESS; blue = CONFIG_FALL_RGB_BRIGHTNESS; break;
     case FALL_STATE_ERROR: red = 32; green = 8; break;
     case FALL_STATE_NORMAL: break;
     case FALL_STATE_SLEEP: green = 6; blue = 8; break;
