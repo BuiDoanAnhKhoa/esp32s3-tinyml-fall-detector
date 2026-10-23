@@ -1,5 +1,7 @@
 # 🚨 Edge TinyML Fall Detector on ESP32-S3
 
+Developed as a course project for **Samsung Innovation Campus 2026**.
+
 [![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v6.0+-blue.svg?logo=espressif)](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/)
 [![Target](https://img.shields.io/badge/Hardware-ESP32--S3%20N16R8-red.svg)](https://www.espressif.com/en/products/socs/esp32-s3)
 [![Framework](https://img.shields.io/badge/AI-TensorFlow%20Lite%20Micro-orange.svg?logo=tensorflow)](https://www.tensorflow.org/lite/microcontrollers)
@@ -14,6 +16,7 @@ A real-time edge fall detection system deployed on the **ESP32-S3** dual-core mi
 ## 📑 Table of Contents
 - [System Architecture](#-system-architecture)
 - [Key Features](#-key-features)
+- [Hardware Photos](#hardware-photos)
 - [Hardware \& Pinout](#-hardware--pinout)
 - [Directory Structure](#-directory-structure)
 - [Prerequisites \& Installation](#-prerequisites--installation)
@@ -101,6 +104,18 @@ Button -------->  | Sleep/Wake Toggle   |--- LED + MQTT status updates       |
   - MQTT status messages indicate the current mode (`active` or `sleep`).
 - **Addressable RGB Visualizer:**
   - Real-time WS2812 LED feedback driven by hardware RMT peripheral.
+
+---
+
+## Hardware Photos
+
+Photos of the project hardware are stored in [`hardware-pics/`](hardware-pics/).
+
+![Project hardware photo 1](hardware-pics/2846780d9421147f4d303.jpg)
+
+![Project hardware photo 2](hardware-pics/5b1c245ac876482811671.jpg)
+
+![Project hardware photo 3](hardware-pics/85565f1eb332336c6a232.jpg)
 
 ---
 
